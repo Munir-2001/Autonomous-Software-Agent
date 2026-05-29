@@ -45,11 +45,12 @@ export const CONFIG = {
   DELIBERATION_BUDGET_MS: 80,
 
   // --- Carrying strategy ---
-  // Force return-to-delivery when carrying this many parcels even if more
-  // would be reachable. Bumped so multi-pickup sweeps along linear
-  // pickup-point clusters can accumulate more before being interrupted.
-  // Decay-race trigger below still ensures we don't carry forever.
-  CARRY_FORCE_DELIVER: 5,
+  // Force return-to-delivery when carrying this many parcels. Round-1
+  // post-mortem (learnings.md): top agents stacked 10-20 before
+  // delivering for ~5-7x per-tile efficiency. Bumped 5 → 10 to match.
+  // Decay-race trigger below still ensures we deliver before parcels
+  // rot; H3 marginal chain-safe is what makes stacks past 4 feasible.
+  CARRY_FORCE_DELIVER: 10,
 
   // If the highest-decay carried parcel has fewer than this many ticks left
   // (after travel cost), force delivery. This is the safety valve that

@@ -1,160 +1,240 @@
-# Competition Learnings — Round 1 (7/25)
+# Competition Learnings — Round 1 (10/29)
 
-Recorded after the first live multi-agent round. Source of truth for the
-next iteration's tuning and strategy decisions. Not a fix list — that
-comes after we agree on direction.
-
----
-
-## Result
-
-- Final position: **7/25**.
-- Per-map ranking: consistently **6th–8th**, occasionally lower.
-- Round length: **3–5 minutes** (varies by map).
+Recorded after the first live multi-agent round (5 May 2026, Challenge 1).
+Source of truth for the round-2 plan. Updated after reading the official
+leaderboard and rules PDFs.
 
 ---
 
-## Score-shape observation (the central finding)
+## Actual result (corrected from initial estimate)
 
-Our score rose **linearly** over each round. Top agents' scores rose in
-**bursts** — long stretches of no score, then big jumps when they
-delivered a stack of 10–20 parcels at once.
+- **Final position: 10th out of 29 teams.**
+- **Final score: 24 points.**
+- Round 1 had **10 maps**. Points per map: 10 → 1 to top-10 finishers,
+  blank/0 for 11th and below. Final = sum across maps.
 
-That is the difference between a *steady-trickle* strategy and a
-*batch-delivery* strategy. The math favors batches:
+Per-map breakdown for MI6 (point → placement):
 
-- Each delivery trip has a fixed travel-time tax (round-trip distance).
-- Delivering 1 parcel pays that tax for 1 reward.
-- Delivering 10 parcels pays roughly the same tax for 10 rewards.
+| Map | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| MI6 | — | — | 5 (6th) | 6 (5th) | 4 (7th) | 3 (8th) | 1 (10th) | — | 5 (6th) | — |
 
-So per tile traveled, batching is **~5–7× more efficient**. Over 3–5 min
-the compounding gap is exactly what put us at 7/25 instead of top 3.
+- **Best**: map 4 — 5th place
+- **Worst**: map 7 — 10th place (1 point, last scoring slot)
+- **Zero-rounds (failed to place top 10)**: maps 1, 2, 8, 10 — four out of ten.
+
+---
+
+## The "rule violation" hypothesis is FALSE
+
+The rules PDF says exactly three things:
+
+1. One agent per group.
+2. 10 rounds (maps).
+3. Top-10 placement per round earns 10→1 points; final = sum.
+
+**There is no "rule violation → no mark" mechanic.** Our four zero-rounds
+were simply 11th-place-or-worse finishes (or disconnects). The
+directional-tile fix from round 1 was correctness, not a "no-mark bug"
+fix.
+
+---
+
+## Leaderboard tiers
+
+| Tier | Range | Examples | What separates them |
+|---|---|---|---|
+| 1 (winner) | 79 | agent_007 | Six 10s + one 8 — *dominated*, scored top-3 on almost every map. Distinct strategy. |
+| 2 | 58–61 | ORA CONSEGNO IO, DeliveryNotFound | Consistent top-3 placements; rarely below 5th. |
+| 3 | 32–53 | filobus, Magnagatti, French, Dalla A alla T | Solid middle-pack; scored in most rounds. |
+| 4 (us) | 24–26 | MI6, davide², JustEat | Scored in some rounds, missed several. |
+| 5 | 0–19 | many | Scored once or twice or never. |
+
+**Most impactful gap to close: we lost 4 entire rounds.** Even placing
+10th in each missing round would have lifted us to 28 (8th place
+overall). Placing 5th in each would have put us at 48 (5th overall).
+
+---
+
+## Score-shape observation
+
+On the rounds we *did* score, our score rose **linearly** — many small
+deliveries (1–3 parcels). Top agents' scores rose in **bursts**: long
+silence, then big jumps from delivering 10–20 parcels at once.
+
+Per tile traveled, batching is ~5–7× more efficient than the
+steady-trickle pattern. In a 3–5 min round this compounding gap is what
+keeps us tier 4 instead of tier 1–2.
 
 ---
 
 ## Behaviors observed in our agent
 
-1. **Abandoned stacking around 3–4 carried.** When carrying parcels and
-   a new one became visible, the agent often kept walking toward
-   delivery instead of diverting. Even when a visible parcel was nearby,
-   the agent ignored it — likely because the deliver-now score had
-   already grown large enough to win the comparison.
-2. **Linear, predictable score growth.** Frequent small deliveries
-   (1–3 parcels each) instead of occasional big ones.
-3. **Random-looking step interjected mid-mission.** Sometimes the agent
-   takes a single step that isn't toward the current delivery or
-   pickup target. Need to confirm cause — candidates: stuck-detector
-   sidestep firing too eagerly, panic-mode waypoint, or transient block
-   re-routing. **Open question — instrument logs next round to confirm.**
-4. **No tour-while-carrying.** Once carrying, the agent goes deliver.
-   It does not patrol pickup points to look for more parcels first.
-5. **Linear pickup clusters under-exploited.** When pickup points are
-   in a row or tight cluster, the explore plan can sweep them — but
-   that mode dies after parcel #1 (we exit explore once carrying).
+1. **Hard cap on stacking around 3–4 carried.** Once the deliver-now
+   score grew large, the agent committed to delivery even when fresh
+   parcels were visible. The cap was implemented (CARRY_FORCE_DELIVER =
+   5 in current code) AND emergent from how the deliver score scales
+   linearly with carried-sum.
+
+2. **No batch-then-deliver behavior.** We deliver as soon as the
+   deliver score wins the comparison; we do not patrol pickup points
+   while carrying, even when delivery is far and parcels are sparse.
+
+3. **Linear, predictable score growth.** Frequent small deliveries
+   instead of occasional big ones.
+
+4. **Random-looking step interjected mid-mission.** Sometimes the
+   agent takes a step that isn't toward the current pickup / delivery
+   target. Candidates: stuck-detector sidestep, panic waypoint,
+   transient-block replan. **Open — instrument next round to confirm.**
+
+5. **Visible parcels sometimes skipped.** When carrying ≥3, a visible
+   parcel within sensing range can fail to win over deliver, especially
+   if chain-safe (`allCarriedSurviveChain`) breaks because one old
+   carried parcel projects to zero on the longer chain path.
+
+6. **Linear / clustered pickup points under-exploited.** Linear-sweep
+   logic exists but only fires inside the explore plan — once we're
+   carrying, it doesn't influence target selection.
+
+7. **No "global map situation awareness".** The agent does not reason
+   about *the overall layout* relative to what it has seen — e.g.,
+   "drop-off is in the corner, spawn cluster is near me, therefore
+   collect more before committing to the long delivery trip." Decisions
+   are local per-cycle on current scores. This is probably the biggest
+   architectural gap behind tier 4 vs tier 1.
 
 ---
 
-## Behaviors observed in top agents
+## Possible rule-correctness issue: directional tile EXIT
 
-1. **Stacks of 10–20 parcels** before any delivery commitment.
-2. **Long sweeps along linear pickup-point corridors**, opportunistically
-   grabbing parcels as they spawn.
-3. **Few but big deliveries** — clear bursts of score growth.
-4. **Counter-example: agents with no carry cap at all** appeared to
-   over-collect and never deliver — they didn't outscore us. So the
-   cap matters, but ours is set too low.
+On maps with arrow tiles (`↑`, `↓`, `←`, `→`), the open-source backend's
+`allowsExitInDirection` has an early `return true;` — exit unrestricted,
+only entry is gated. We currently honor the entry rule (good).
+
+**But the live competition server may run a different version where
+exit IS restricted** (must move in the arrow direction when standing on
+a directional tile). If true, on maps with many arrow tiles our BFS
+plans some moves the server then rejects → penalty accumulation →
+silent kick → blank-round result. This is the most likely explanation
+for at least one of our four zero-rounds.
+
+**Verify**: cross-check live-server behavior on a small arrow-heavy
+map and watch for hidden penalty accumulation. If confirmed, add the
+exit-direction restriction to our BFS expansion the same way we did
+for entry.
 
 ---
 
-## Map-type pattern (hypothesis, needs confirmation)
+## Map-type pattern (hypothesis, not yet confirmed)
 
-| Map type | Delivery distance | Likely optimal stack | Our stack | Top stack |
+| Map type | Delivery distance | Optimal stack | Our stack | Top stack |
 |---|---|---|---|---|
-| Short — delivery tiles everywhere | 2–4 | 3–5 | 3–4 | 4–5 |
-| Medium | 5–8 | 6–8 | 3–4 | 7–9 |
-| Long — delivery in one corner | 10+ | 8–12 | 3–5 | 10+ |
+| Short — delivery tiles everywhere | 2–4 | 3–5 | 3–4 ✓ | 4–5 |
+| Medium | 5–8 | 6–8 | 3–4 ✗ | 7–9 |
+| Long — delivery in one corner | 10+ | 8–12 | 3–5 ✗✗ | 10+ |
 
-We hold our own on short-delivery maps. The 6–8 average is dragged down
-by the medium- and long-delivery maps. **Open question — confirm by
-logging delivery distance per round next time.**
+We hold our own on short-delivery maps. The 6–8th avg is dragged down
+by medium and long-delivery maps where batching matters most.
+**Open — log delivery distance per round next time.**
 
 ---
 
 ## Strategic hypotheses to test next round
 
-These are **directions, not commitments**. Each needs to be evaluated
-against the next round's results before locking in.
+Directions, not commitments. Each evaluated against round-2 results.
+
+### TOP PRIORITY — H0: eliminate zero-rounds
+
+The 4 missed rounds cost more than any single tuning change can buy
+back. Two sub-tasks:
+
+- **H0a — directional EXIT rule**: implement and test on an arrow-heavy
+  map. If the live server enforces it, this alone may unblock 1–2
+  rounds.
+- **H0b — robustness telemetry**: log every disconnect, penalty
+  accumulation, and "no plan found" event with map id, so we can
+  pinpoint why specific maps fail.
 
 ### H1 — Stack more, but bounded
 
-Top no-cap agents lost to top capped-stack agents. Implication: there
-is an optimal cap, and ours is too low. **Hypothesis: optimal cap is
-~10 on long-delivery maps, ~5 on short-delivery maps.** A static
-higher cap (e.g. 10) might be a reasonable compromise; map-adaptive
-would be better but harder to implement.
+Top no-cap agents lost to top capped-stack agents. Optimal cap is map-
+dependent: ~5 short-delivery, ~10 long-delivery. Static ~10 is a
+reasonable first step; map-adaptive is the eventual right answer.
 
-### H2 — Patrol-while-carrying
+### H2 — Patrol while carrying
 
-When carrying < cap and no visible pickup, walk toward an unvisited /
-LRV spawn tile rather than committing to delivery. Only commit to
-delivery when (a) cap hit, (b) decay race, or (c) a sweep yielded no
-new parcels in N moves. This is the single biggest behavior change
-needed to match top agents.
+When `carrying < cap` AND no visible pickup AND not in decay race,
+walk toward an LRV spawn tile instead of delivering. Only commit to
+delivery when (a) cap hit, (b) decay race, or (c) a sweep yielded
+no new parcels in N moves. **Biggest single behavior change to match
+top agents.**
 
 ### H3 — Loosen chain-safe from binary to marginal
 
-Today: pickup boost only fires if **every** carried parcel still
-arrives with positive reward through the longer chain path. Once any
-single old parcel fails this, the boost vanishes and pickup loses to
-deliver.
-
-Hypothesis: replace with marginal value — accept the chain pickup if
-**total delivered value (with pickup) > total delivered value (without
-pickup)**, even if some old parcels lose value. This is what makes
-8–10 stacks possible.
+Replace all-or-nothing `allCarriedSurviveChain` with marginal-value
+test: accept the chain pickup iff *total delivered value (with
+pickup) > total delivered value (without pickup)*, even if some old
+parcels lose value. Unlocks stacks past 4.
 
 ### H4 — Distance-aware deliver discount
 
-Multiply `scoreDeliverNow` by something like `1 / (1 + distance × k)`.
-Long deliveries become per-parcel less attractive — pushes the agent
-to stack more before committing to a far trip. Lever for handling the
-medium/long-delivery maps where we currently underperform.
+Multiply `scoreDeliverNow` by `1 / (1 + distance × k)` so long
+delivery trips become per-parcel less attractive. Specifically targets
+the medium- and long-delivery maps where we currently underperform.
 
-### H5 — Linear sweep through pickup clusters when carrying
+### H5 — Linear sweep through pickup clusters while carrying
 
-Currently the linear-sweep bonus only fires inside the explore plan.
-Extend it: when looking for the next pickup target while carrying,
-also prefer paths that pass through the most spawn tiles. This is
-the "pick a lot of parcels in a tight cluster, then deliver" pattern
-the user identified as a likely top-agent strategy.
+Extend the existing linear-sweep bonus so it also influences target
+selection during the deliver-or-pickup decision, not just during
+explore. The "pick up many parcels in a tight cluster, then deliver"
+pattern needs this.
+
+### H6 — Global map situation awareness (architectural)
+
+Build an internal map model from sensing that tracks:
+
+- Spawn-cluster centroid and density per region.
+- Delivery-tile positions and which spawn clusters they serve.
+- Rough "distance to nearest delivery" per spawn cluster.
+
+Use this in the deliver/pickup decision: if the current spawn cluster
+is "far from any delivery and densely packed with spawns," prefer to
+stack more. If "close to delivery and spawns are sparse," deliver
+sooner.
+
+This is the *qualitative* gap behind tier 4 → tier 1. Bigger lift than
+H1–H5 combined, but also a bigger refactor.
 
 ---
 
-## Open questions to instrument before next round
+## Open questions to instrument before round 2
 
-1. **What causes the random-looking mid-mission step?** Add explicit
-   logs at sidestep / panic / transient-block-replan branches so we
-   can correlate user-observed jitter with code path.
-2. **Per-map delivery distance.** Log distance from spawn-cluster
-   centroid to nearest delivery tile so we can confirm the
-   short/medium/long classification empirically.
+1. **What causes the random-looking mid-mission step?** Explicit logs
+   at sidestep / panic / transient-block-replan branches.
+2. **Per-map delivery distance.** Log spawn-centroid → nearest-delivery
+   distance per round.
 3. **Why are visible parcels sometimes skipped?** Log every option
-   ranking in a deliberation cycle (top 3 with scores) to see whether
-   the visible parcel was scored low or scored high but lost to
-   deliver via margin.
-4. **Per-round stats.** Log final stack size at each delivery, total
-   deliveries, total parcels picked, total parcels missed (visible but
-   not collected). Without these we're guessing.
+   ranking in a deliberation cycle (top 3 with scores + winner) so we
+   can see whether the parcel was scored low or scored high but lost
+   to deliver on margin.
+4. **Per-round stats.** Final stack size per delivery, deliveries
+   count, parcels seen-but-missed, total penalty accumulated.
+5. **Are we being silently penalty-kicked?** Log every penalty change
+   so we can detect a slow drift toward -1000.
 
 ---
 
 ## Decision queue (before code changes)
 
-- [ ] Confirm H2 (patrol-while-carrying) is the priority change. The
-  user's instinct from the round matches the data.
-- [ ] Decide static-cap value (5? 8? 10?) vs map-adaptive cap.
-- [ ] Decide whether to keep `CARRIED_DECAY_FORCE_DELIVER` as the only
-  hard delivery trigger or add a "long-walk-no-progress" trigger.
-- [ ] Whether to add the per-cycle option-ranking log for next round.
-
-Once H2 is in and we have one more round of data, revisit this file.
+- [ ] **Confirm H0a is the first item to ship.** A correctness fix
+  for directional-exit (if live server enforces it) plausibly turns
+  one or two zero-rounds into ≥1 point each.
+- [ ] Decide on telemetry depth (H0b + open questions 1–5). Pick
+  bare-minimum logs vs full instrumentation.
+- [ ] Decide H1's static cap value (5? 8? 10?) vs deferring to map-
+  adaptive in H6.
+- [ ] Whether H6 (global map awareness) is in scope for round 2 or
+  deferred to round 3. Big lift, big payoff.
+- [ ] Ordering: H0a → instrument → H3 + H2 + H1 → measure → H4 →
+  H6. Adjust based on what round 2 reveals.

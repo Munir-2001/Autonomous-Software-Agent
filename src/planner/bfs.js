@@ -7,6 +7,7 @@
 
 import { tileKey, applyDirection, directionFromTo } from '../utils/geometry.js';
 import { log } from '../utils/log.js';
+import { isForbiddenTile } from '../shared/policy-reader.js';
 
 const DIRECTIONS = ['up', 'right', 'down', 'left'];
 
@@ -61,6 +62,10 @@ export function bfs(beliefs, from, target, blocked = new Set(), { ignoreTransien
     // the final target — by the time we arrive, the block will likely
     // have expired.
     if (!ignoreTransient && !isTarget && beliefs.isTransientBlocked(x, y)) return false;
+    // Level-2 policy: LLM-supplied forbidden tiles (e.g. "do not go
+    // through tile (x,y)"). Treat like a permanent block — never as
+    // a target either, since traversing INTO it is what's forbidden.
+    if (isForbiddenTile(x, y)) return false;
     return true;
   };
 

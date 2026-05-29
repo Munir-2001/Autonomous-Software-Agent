@@ -10,6 +10,7 @@
 import { CONFIG } from './config.js';
 import { manhattan, tileKey, roundPos } from './utils/geometry.js';
 import { log } from './utils/log.js';
+import { getPolicy } from './shared/policy-reader.js';
 
 export class Beliefs {
   constructor() {
@@ -436,10 +437,14 @@ export class Beliefs {
   }
 
   // List visible-or-tracked uncarried parcels (potential targets).
+  // Level-2 policy: maxParcelRewardAtDelivery — refuse to even chase
+  // high-reward parcels when the mission says "no reward above N".
   candidateParcels() {
+    const maxReward = getPolicy('maxParcelRewardAtDelivery');
     const out = [];
     for (const p of this.parcels.values()) {
       if (p.carriedBy && p.carriedBy !== this.me.id) continue;
+      if (maxReward != null && p.reward > maxReward) continue;
       // Skip parcels WE already carry — sensing keeps reporting them
       // because they're at our position, but they shouldn't be re-pickup
       // candidates; that's an infinite loop trap.

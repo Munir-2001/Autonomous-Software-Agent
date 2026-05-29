@@ -113,18 +113,26 @@ export function scoreParcel(parcel, beliefs) {
   // When we're already carrying parcels, picking up X and continuing to
   // delivery brings the carried parcels along for the ride. Their value
   // at delivery is part of the chain's payoff and must be credited so
-  // we compare apples-to-apples against `scoreDeliverNow`. Track whether
-  // every carried parcel survives the (longer) pickup path.
+  // we compare apples-to-apples against `scoreDeliverNow`.
+  //
+  // H3 (learnings.md): the OLD test was binary "allCarriedSurvive" —
+  // it failed the moment any one carried parcel decayed to 0 on the
+  // chain path, which broke stacking past ~4 parcels. The NEW test
+  // is marginal: accept the chain iff
+  //   total_value_with_pickup  >  total_value_without_pickup
+  // i.e. losing a little decay on old parcels is fine as long as the
+  // new parcel more than compensates.
   let carriedAtDelivery = 0;
-  let allCarriedSurviveChain = true;
+  let carriedAtDeliverNow = 0;
   for (const c of beliefs.carrying.values()) {
     if (c.reward <= 0) continue; // skip expired ghosts
-    const cAtDelivery = Math.max(0, c.reward - decayPerStep * totalDist);
-    carriedAtDelivery += cAtDelivery;
-    // Lenient: any positive arrival counts as "survives". A parcel
-    // arriving with reward 0.5 is still better than not picking up the
-    // new parcel at all.
-    if (cAtDelivery <= 0) allCarriedSurviveChain = false;
+    // Value if we go pickup THEN deliver (longer chain path).
+    carriedAtDelivery += Math.max(0, c.reward - decayPerStep * totalDist);
+    // Value if we deliver NOW (short path: me → nearest delivery).
+    // Use the SAME delivery tile the chain would arrive at, so the
+    // comparison isolates the cost of the extra pickup detour.
+    const dNow = manhattan(me, delivTile);
+    carriedAtDeliverNow += Math.max(0, c.reward - decayPerStep * dNow);
   }
 
   // Viability — close parcels use a different rule than far parcels:
@@ -160,16 +168,18 @@ export function scoreParcel(parcel, beliefs) {
     score = Math.max(score, projAtPickup);
   }
 
-  // Chain-safe boost: when we're carrying and BOTH (a) the new parcel
-  // would be delivered with positive value AND (b) every live carried
-  // parcel would also still be valuable at delivery via the pickup path,
-  // strongly prefer chaining over delivering. Without this boost the
-  // INTENTION_MARGIN can prevent switching from a deliver intention to
-  // a clearly-better pickup chain. (User-requested behavior.)
+  // Chain-safe boost (H3 marginal-value): when we're carrying and the
+  // chain TOTAL beats the deliver-now TOTAL, the chain is "safe" —
+  // the new parcel more than compensates for whatever decay it costs
+  // the existing carried parcels. This lets stacks grow past 4-5
+  // (where the old all-or-nothing rule broke), matching the 10-20
+  // stacks the top agents used in round 1.
   const carriedCount = beliefs.carriedCount();
+  const valueWithPickup    = deliveryReward + carriedAtDelivery;
+  const valueWithoutPickup = carriedAtDeliverNow;
   const chainIsSafe = carriedCount > 0
     && viable
-    && allCarriedSurviveChain;
+    && valueWithPickup > valueWithoutPickup;
   if (chainIsSafe) {
     score *= CONFIG.CHAIN_SAFE_BOOST;
   }

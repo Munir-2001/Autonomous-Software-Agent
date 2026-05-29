@@ -11,6 +11,7 @@ import { plan as runPlanner } from '../planner/index.js';
 import { bfs } from '../planner/bfs.js';
 import { manhattan, tileKey } from '../utils/geometry.js';
 import { log } from '../utils/log.js';
+import { deliveryMultiplierAt } from '../shared/policy-reader.js';
 
 /**
  * Plan: pickup a parcel.
@@ -150,10 +151,16 @@ function bestDelivery(beliefs) {
   const all = beliefs.map?.deliveryTiles ?? [];
   if (all.length === 0) return null;
 
-  const free = all.filter((t) => !beliefs.isTransientBlocked(t.x, t.y));
-  const candidates = free.length > 0 ? free : all;
+  // Level-2 policy: drop tiles flagged as zero-reward, and only
+  // exclude transient-blocked when at least one free tile exists.
+  const filteredByPolicy = all.filter((t) => deliveryMultiplierAt(t.x, t.y) > 0);
+  const policyAllowed = filteredByPolicy.length > 0 ? filteredByPolicy : all;
+  const free = policyAllowed.filter((t) => !beliefs.isTransientBlocked(t.x, t.y));
+  const candidates = free.length > 0 ? free : policyAllowed;
 
   // Compute BFS distance for each candidate; null means unreachable.
+  // Apply per-tile policy multiplier — a 5× bonus tile beats a closer
+  // normal tile when the bonus outweighs the extra travel.
   const occ = beliefs.occupiedByOthers();
   const scored = candidates.map((t) => {
     const route = bfs(beliefs, me, t);
@@ -165,11 +172,15 @@ function bestDelivery(beliefs) {
       const dy = dir === 'up' ? 1 : dir === 'down' ? -1 : 0;
       if (occ.has(tileKey(t.x + dx, t.y + dy))) congestion += 1;
     }
-    return { tile: t, dist, congestion };
+    const mult = deliveryMultiplierAt(t.x, t.y);
+    // Effective cost = distance ÷ multiplier. A 5× bonus tile that's
+    // 10 tiles away beats a 1× tile that's 3 tiles away (eff 2 vs 3).
+    const effCost = dist != null ? dist / mult : null;
+    return { tile: t, dist, congestion, mult, effCost };
   }).filter((s) => s.dist !== null);
 
   if (scored.length === 0) {
-    // Nothing reachable — fall back to Manhattan-nearest.
+    // Nothing reachable — fall back to Manhattan-nearest among policy-allowed.
     let best = null;
     let bestD = Infinity;
     for (const t of candidates) {
@@ -179,8 +190,9 @@ function bestDelivery(beliefs) {
     return best;
   }
 
-  // Sort by BFS distance ASC, then congestion ASC (less congested wins ties).
-  scored.sort((a, b) => a.dist - b.dist || a.congestion - b.congestion);
+  // Sort by effective cost (distance ÷ policy multiplier) ASC, then
+  // congestion ASC (less congested wins ties).
+  scored.sort((a, b) => a.effCost - b.effCost || a.congestion - b.congestion);
   return scored[0].tile;
 }
 

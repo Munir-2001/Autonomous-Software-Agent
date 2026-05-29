@@ -19,6 +19,7 @@ import { IntentionManager } from './intentions.js';
 import { selectPlan } from './plans/library.js';
 import { reactiveDecide } from './reactive.js';
 import { Executor } from './executor.js';
+import { publishBeliefs } from './shared/belief-writer.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -98,6 +99,9 @@ socket.on('you', (agent) => {
 socket.on('sensing', (sensing) => {
   if (!sensing) return;
   beliefs.brf(sensing);
+  // Push freshest beliefs to the shared file the LLM agent reads
+  // for its sensing tools. Debounced + atomic write inside.
+  publishBeliefs(beliefs, intentions.current);
 });
 
 function maybeStart() {

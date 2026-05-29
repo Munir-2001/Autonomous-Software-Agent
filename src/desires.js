@@ -14,6 +14,7 @@
 import { CONFIG } from './config.js';
 import { rankParcels, scoreDeliverNow } from './scoring.js';
 import { manhattan } from './utils/geometry.js';
+import { getPolicy } from './shared/policy-reader.js';
 
 /**
  * Generate the set of options.
@@ -86,8 +87,22 @@ export function generateOptions(beliefs) {
     });
   }
 
-  // Deliver option (only if carrying).
-  if (carrying > 0) {
+  // Level-2 policy override: requiredStackSize.
+  // Mission: "deliver stacks of exactly N parcels". The LLM has
+  // written this into the policy file. We honor it by:
+  //   1) Suppressing the normal deliver option until carrying === N
+  //      (so the agent keeps collecting).
+  //   2) Suppressing the decay-race force when carrying < N (so we
+  //      don't deliver too early). Capacity force still applies as
+  //      a safety valve (we can't carry infinity).
+  const requiredStackSize = getPolicy('requiredStackSize');
+  // `>=` not `===` so an accidental overshoot doesn't deadlock the
+  // agent. The LLM should clear/adjust the policy once the mission
+  // is satisfied; until then we deliver as soon as we have enough.
+  const stackComplete = requiredStackSize == null || carrying >= requiredStackSize;
+
+  // Deliver option (only if carrying AND policy allows).
+  if (carrying > 0 && stackComplete) {
     const dn = scoreDeliverNow(beliefs);
     if (dn && dn.viable) {
       // Pickup-density damper: while there are still several viable
@@ -150,6 +165,53 @@ export function generateOptions(beliefs) {
         score: (dn.score || 0) + 1e6, // priority bump
         meta: { deliveryTile: dn.deliveryTile, forced: true, forceReason },
       });
+    }
+
+    // H2 (learnings.md): patrol-while-carrying.
+    //
+    // Round 1 had us committing to delivery as soon as the deliver
+    // option won the score comparison. On long-delivery maps this
+    // meant we wasted the trip carrying few parcels. Top agents kept
+    // patrolling spawn tiles while carrying small loads until either
+    // the chain was full or decay forced them in.
+    //
+    // We emit an `explore` option whose score grows with:
+    //   - distance to delivery (longer trip → more time to gather more)
+    //   - remaining carry capacity (more room → more value in waiting)
+    //
+    // It loses to actual pickup options (those are scored on real
+    // parcel rewards) and to forced-deliver. It can WIN against the
+    // ordinary deliver option when we're undersupplied + the trip is
+    // long — exactly the case where it should.
+    //
+    // Note: when `stackComplete` is false (requiredStackSize policy
+    // active and we haven't hit N), we skip this block entirely
+    // (deliver isn't emitted, so the empty-options fallback at the
+    // bottom emits explore with the LRV-spawn-tile target). That's
+    // the patrol-while-collecting case, handled separately.
+    if (!force && dn && dn.deliveryTile && carrying < CONFIG.CARRY_FORCE_DELIVER) {
+      const cap = CONFIG.CARRY_FORCE_DELIVER;
+      const dist = dn.distance ?? Infinity;
+      // distanceFactor: 0 when dist ≤ 4, →1 as dist grows
+      const distanceFactor = Math.max(0, Math.min(1, (dist - 4) / 10));
+      // fillFactor: 1 when empty, 0 when full
+      const fillFactor = Math.max(0, (cap - carrying) / cap);
+      // Expected marginal value of one more parcel grabbed en route.
+      // ~5 is a conservative midpoint of typical parcel rewards.
+      const expectedExtraValue = 5;
+      const patrolScore = expectedExtraValue * distanceFactor * fillFactor;
+      if (patrolScore > 0) {
+        options.push({
+          type: 'explore',
+          score: patrolScore,
+          meta: {
+            patrol: true,
+            distanceToDelivery: dist,
+            remainingCapacity: cap - carrying,
+            reason: 'patrol-while-carrying',
+          },
+        });
+      }
     }
   }
 
