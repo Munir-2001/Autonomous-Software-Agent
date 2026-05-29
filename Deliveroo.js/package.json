@@ -1,0 +1,37 @@
+{
+  "name": "@unitn-asa/deliveroo-js",
+  "description": "Deliveroo.js Development Kit - Autonomous Software Agents - 2023",
+  "author": "Marco Robol <marco.robol@unitn.it>",
+  "license": "ISC",
+  "private": true,
+  "workspaces": [
+    "packages/@unitn-asa/*",
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "prepublishOnly": "",
+    "start": "cd backend && npm start",
+    "clean": "rm -r node_modules && rm -r backend/docs && rm backend/.git-revision && rm -r frontend/dist && rm -r frontend/docs && rm -r frontend/node_modules",
+    "prebuild": "npm install && npm run docs",
+    "build": "cd frontend && npm run build && cd ../backend && npm run build",
+    "postbuild": "",
+    "dev": "cd backend && npm run dev",
+    "dev-ui": "cd frontend && npm run dev",
+    "dev-all": "npm run dev & npm run dev-ui",
+    "docs": "cd backend && npm run docs && cd ../frontend && npm run docs",
+    "publish:sdk": "npm version --workspace=@unitn-asa/deliveroo-js-sdk patch && npm publish --workspace=@unitn-asa/deliveroo-js-sdk",
+    "publish:pddl": "npm version --workspace=@unitn-asa/pddl-client patch && npm publish --workspace=@unitn-asa/pddl-client"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/unitn-ASA/Deliveroo.js.git"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "typescript": "^6.0.2"
+  },
+  "engines": {
+    "node": "22.x"
+  }
+}

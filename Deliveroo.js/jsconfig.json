@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "module": "NodeNext",
+    "target": "es2022",
+    "moduleResolution": "nodenext", // Aggiungi questa riga
+    "sourceMap": true,
+    "allowJs": true,
+    "checkJs": true
+  },
+  "exclude": [
+    "node_modules",
+    "**/node_modules/*"
+  ]
+}

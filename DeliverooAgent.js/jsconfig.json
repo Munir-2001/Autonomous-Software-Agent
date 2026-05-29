@@ -1,0 +1,15 @@
+{
+    "compilerOptions": {
+      "module": "NodeNext",
+      "target": "ES2020",
+      "sourceMap": true,
+      "allowJs": true,
+      "checkJs": true,
+      "noImplicitAny": false,
+      "moduleResolution": "nodenext"
+    },
+    "exclude": [
+      "node_modules",
+      "**/node_modules/*"
+    ]
+}

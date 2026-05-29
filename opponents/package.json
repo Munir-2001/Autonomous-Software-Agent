@@ -1,0 +1,16 @@
+{
+  "name": "asa-opponents",
+  "version": "0.1.0",
+  "description": "Opponent zoo for evaluating the BDI agent (greedy, random, blocker, ...)",
+  "type": "module",
+  "scripts": {
+    "greedy":    "node -r dotenv/config src/greedy.js",
+    "random":    "node -r dotenv/config src/random.js",
+    "blocker":   "node -r dotenv/config src/blocker.js",
+    "match":     "node -r dotenv/config src/runner.js"
+  },
+  "dependencies": {
+    "@unitn-asa/deliveroo-js-sdk": "^1.3.5",
+    "dotenv": "^16.4.5"
+  }
+}

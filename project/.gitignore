@@ -1,0 +1,10 @@
+node_modules/
+.env
+.DS_Store
+*.log
+slides/
+
+# Runtime state shared between BDI and LLM agents. Generated each
+# cycle by the BDI process; consumed by the LLM agent's tools.
+# Don't commit — it's per-run data.
+state/*.json

@@ -1,0 +1,51 @@
+{
+  "name": "@unitn-asa/deliveroo-js-backend",
+  "version": "2.4.1",
+  "description": "Deliveroo.js Development Kit - Autonomous Software Agents - 2023",
+  "author": "Marco Robol <marco.robol@unitn.it>",
+  "license": "ISC",
+  "private": true,
+  "type": "module",
+  "module": "es2022",
+  "main": "index.js",
+  "bin": {
+    "deliveroo-js-server": "./scripts/cli.js"
+  },
+  "scripts": {
+    "prepublishOnly": "",
+    "prepare": "",
+    "start": "node index.js",
+    "prebuild": "npm install",
+    "build": "node scripts/build.js",
+    "dev": "nodemon --inspect -r dotenv/config index.js --",
+    "schemas:generate": "node scripts/generate-schemas.js",
+    "swagger:generate": "npm run schemas:generate && node scripts/generate-swagger.js",
+    "docs": "npm run schemas:generate && typedoc"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/unitn-ASA/Deliveroo.js.git"
+  },
+  "devDependencies": {
+    "dotenv": "^16.0.3",
+    "jest": "^27.5.1",
+    "nodemon": "^3.1.9",
+    "typedoc": "^0.28.17"
+  },
+  "dependencies": {
+    "@unitn-asa/deliveroo-js-assets": "*",
+    "@unitn-asa/deliveroo-js-sdk": "*",
+    "@unitn-asa/deliveroo-js-webapp-dist": "^2.3.1",
+    "argparse": "^2.0.1",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.0",
+    "serve-index": "^1.9.1",
+    "socket.io": "^4.4.1",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1",
+    "uid": "^2.0.1"
+  },
+  "engines": {
+    "node": "22.x"
+  }
+}
